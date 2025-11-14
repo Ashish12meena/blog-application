@@ -49,7 +49,6 @@ public class UserServiceImpl {
     }
 
     // Retrieve all users
-
     public List<User> getAllUsers() {
         return userRepository.findAll();
     }
@@ -62,7 +61,6 @@ public class UserServiceImpl {
     }
 
     // Update a user
-
     public User updateUser(String id, User userDetails) {
         Optional<User> optionalUser = userRepository.findById(id);
         if (optionalUser.isEmpty()) {
@@ -80,7 +78,6 @@ public class UserServiceImpl {
     }
 
     // Delete a user
-
     public void deleteUser(String id) {
         if (!userRepository.existsById(id)) {
             throw new NoSuchElementException("User with ID " + id + " not found");
@@ -88,15 +85,13 @@ public class UserServiceImpl {
         userRepository.deleteById(id);
     }
 
-    // Add this updated method to UserServiceImpl.java
-    // Replace the existing getUserCardData method
-
-    public ResponseEntity<?> getUserCardData(String loginedUserId, String email) {
+    // Fixed method signature - now accepts email and loggedInUserId
+    public ResponseEntity<?> getUserCardData(String email, String loggedInUserId) {
         ExecutorService executor = Executors.newFixedThreadPool(4);
 
         try {
             // Find user by email
-            Optional<User> optionalUser = Optional.ofNullable(userRepository.findByEmail(email).orElse(null));
+            Optional<User> optionalUser = userRepository.findByEmail(email);
 
             if (optionalUser.isEmpty()) {
                 return ResponseEntity.status(HttpStatus.NOT_FOUND)
@@ -104,13 +99,16 @@ public class UserServiceImpl {
             }
 
             User user = optionalUser.get();
-            String anotherUserId = user.getId();
+            String targetUserId = user.getId(); // The user whose profile we're viewing
 
-            // Get posts by user ID
-            List<Post> posts = postService.getPostsByUserId(anotherUserId);
+            // Get posts by the target user's ID
+            List<Post> posts = postService.getPostsByUserId(targetUserId);
 
-            // Check follow status
-            boolean followStatus = followService.isFollowing(loginedUserId, anotherUserId);
+            // Check follow status between logged-in user and target user
+            boolean followStatus = false;
+            if (!loggedInUserId.equals(targetUserId)) {
+                followStatus = followService.isFollowing(loggedInUserId, targetUserId);
+            }
 
             // Build user response
             Map<String, Object> responseBody = new HashMap<>();
@@ -136,7 +134,7 @@ public class UserServiceImpl {
 
             // Fetch likes asynchronously
             CompletableFuture<Map<String, Boolean>> likeFuture = CompletableFuture.supplyAsync(
-                    () -> likeService.getLikeStatus(loginedUserId, postIds), executor);
+                    () -> likeService.getLikeStatus(loggedInUserId, postIds), executor);
 
             // Fetch post details asynchronously
             List<CompletableFuture<GetUserCardDetails>> postFutures = posts.stream()
@@ -177,7 +175,6 @@ public class UserServiceImpl {
     }
 
     public User getUserByEmail(String email) {
-
         return userRepository.findByEmail(email).orElse(null);
     }
 
@@ -186,43 +183,38 @@ public class UserServiceImpl {
     }
 
     public void incrementFollowerCount(String userId) {
-
         Query query = new Query(Criteria.where("id").is(userId));
-        Update update = new Update().inc("followerCount", 1); // Increment likeCount by 1
+        Update update = new Update().inc("followerCount", 1);
         mongoTemplate.updateFirst(query, update, User.class);
     }
 
     public void decrementFollowerCount(String userId) {
-
         Query query = new Query(Criteria.where("id").is(userId));
-        Update update = new Update().inc("followerCount", -1); // Increment likeCount by 1
+        Update update = new Update().inc("followerCount", -1);
         mongoTemplate.updateFirst(query, update, User.class);
     }
 
     public void incrementFollowingCount(String userId) {
-
         Query query = new Query(Criteria.where("id").is(userId));
-        Update update = new Update().inc("followingCount", 1); // Increment likeCount by 1
+        Update update = new Update().inc("followingCount", 1);
         mongoTemplate.updateFirst(query, update, User.class);
     }
 
     public void decrementFollowingCount(String userId) {
-
         Query query = new Query(Criteria.where("id").is(userId));
-        Update update = new Update().inc("followingCount", -1); // Increment likeCount by 1
+        Update update = new Update().inc("followingCount", -1);
         mongoTemplate.updateFirst(query, update, User.class);
     }
 
     public void incrementPostCount(String userId) {
         Query query = new Query(Criteria.where("id").is(userId));
-        Update update = new Update().inc("postCount", 1); // Increment likeCount by 1
+        Update update = new Update().inc("postCount", 1);
         mongoTemplate.updateFirst(query, update, User.class);
     }
 
     public void decrementPostCount(String userId) {
-
         Query query = new Query(Criteria.where("id").is(userId));
-        Update update = new Update().inc("postCount", -1); // Increment likeCount by 1
+        Update update = new Update().inc("postCount", -1);
         mongoTemplate.updateFirst(query, update, User.class);
     }
 
@@ -240,7 +232,5 @@ public class UserServiceImpl {
 
     public List<User> findAllById(List<String> userIds) {
         return userRepository.findAllById(userIds);
-
     }
-
 }
