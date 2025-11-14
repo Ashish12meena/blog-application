@@ -17,11 +17,11 @@ public class FollowOrchestratorServiceImpl {
     @Transactional
     public Follow addFollower(String loggedUserId,
             String followedUserId) {
-       Follow follow = addFollower(loggedUserId, followedUserId);
+       Follow follow = followService.addFollower(loggedUserId, followedUserId);
         try {
             userService.incrementFollowerCount(followedUserId);
-
             userService.incrementFollowingCount(loggedUserId);
+            followService.save(follow);
         } catch (Exception e) {
             throw new RuntimeException("Error while adding follower: " + e.getMessage());
         }

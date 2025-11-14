@@ -1,6 +1,7 @@
 package com.bloggera.blog.config;
 
 import java.util.Arrays;
+import java.util.List;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -27,13 +28,14 @@ import lombok.RequiredArgsConstructor;
 public class SecurityConfig {
     private final UserDetailsService userDetailsService;
 
-    // 🔹 CORS config
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration corsConfig = new CorsConfiguration();
-        corsConfig.setAllowedOrigins(Arrays.asList("http://localhost:5173"));
-        corsConfig.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS"));
-        corsConfig.setAllowCredentials(true);
+        corsConfig.setAllowedOrigins(List.of("http://localhost:5173")); // React dev server
+        corsConfig.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
+        corsConfig.setAllowedHeaders(List.of("Authorization", "Content-Type", "Accept"));
+        corsConfig.setExposedHeaders(List.of("Authorization"));
+        corsConfig.setAllowCredentials(true); // Allow sending cookies/tokens
 
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", corsConfig);
@@ -42,24 +44,19 @@ public class SecurityConfig {
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
-
-        http.csrf(csrf -> csrf.disable());
-        http.cors(Customizer.withDefaults());
-
-        http.authorizeHttpRequests(auth -> auth
-                .requestMatchers("/auth/users/**").permitAll() // public APIs
-                .requestMatchers("/**").permitAll()
-                .anyRequest().authenticated());
-
-        http.httpBasic(Customizer.withDefaults()); // Basic auth (API testing)
-
-        // Use session-based authentication
-        http.sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED));
+        http
+            .csrf(csrf -> csrf.disable())
+            .cors(cors -> cors.configurationSource(corsConfigurationSource()))
+            .authorizeHttpRequests(auth -> auth
+                .requestMatchers("/auth/users/**").permitAll()
+                .anyRequest().permitAll()
+            )
+            .httpBasic(Customizer.withDefaults())
+            .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED));
 
         return http.build();
     }
 
-    // Authentication provider
     @Bean
     public AuthenticationProvider authenticationProvider() {
         DaoAuthenticationProvider provider = new DaoAuthenticationProvider();
@@ -68,10 +65,8 @@ public class SecurityConfig {
         return provider;
     }
 
-    // Authentication manager
     @Bean
     public AuthenticationManager authenticationManager(AuthenticationConfiguration config) throws Exception {
         return config.getAuthenticationManager();
     }
-
 }

@@ -41,7 +41,6 @@ import com.bloggera.blog.model.Post;
 import com.bloggera.blog.model.User;
 import com.bloggera.blog.repository.PostRepository;
 
-
 // import com.example.Blogera_demo.repository.LikeRepository;
 
 @Service
@@ -478,6 +477,18 @@ public class PostServiceImpl {
 
     public List<Post> getPostsByPostIds(List<String> postIds) {
         return postRepository.findAllById(postIds);
+    }
+
+    public void deletePost(String postId, String userId) {
+        Post post = getPostsByPostId(postId);
+        if (post == null) {
+            throw new IllegalArgumentException("Post not found");
+        }
+        if (!post.getUserId().equals(userId)) {
+            throw new SecurityException("You can only delete your own posts");
+        }
+        postRepository.deleteById(postId);
+        userService.decrementPostCount(userId);
     }
 
 }

@@ -37,4 +37,8 @@ public class FollowService {
         return status;
     }
 
+    public void save(Follow follow){
+        followRepository.save(follow);
+    }
+
 }
