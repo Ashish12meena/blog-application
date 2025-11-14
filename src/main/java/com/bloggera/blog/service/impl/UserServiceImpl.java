@@ -88,71 +88,88 @@ public class UserServiceImpl {
         userRepository.deleteById(id);
     }
 
-    public ResponseEntity<?> getUserCardData(String loginedUserId,
-            String anotherUserId) {
+    // Add this updated method to UserServiceImpl.java
+    // Replace the existing getUserCardData method
+
+    public ResponseEntity<?> getUserCardData(String loginedUserId, String email) {
         ExecutorService executor = Executors.newFixedThreadPool(4);
-        Optional<User> optionalUser = userRepository.findById(loginedUserId);
 
-        if (optionalUser.isEmpty()) {
-            return ResponseEntity.status(HttpStatus.NOT_FOUND)
-                    .body(Collections.singletonMap("error", "User not found"));
+        try {
+            // Find user by email
+            Optional<User> optionalUser = Optional.ofNullable(userRepository.findByEmail(email).orElse(null));
+
+            if (optionalUser.isEmpty()) {
+                return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                        .body(Collections.singletonMap("error", "User not found"));
+            }
+
+            User user = optionalUser.get();
+            String anotherUserId = user.getId();
+
+            // Get posts by user ID
+            List<Post> posts = postService.getPostsByUserId(anotherUserId);
+
+            // Check follow status
+            boolean followStatus = followService.isFollowing(loginedUserId, anotherUserId);
+
+            // Build user response
+            Map<String, Object> responseBody = new HashMap<>();
+            responseBody.put("user", Map.of(
+                    "username", user.getUsername(),
+                    "email", user.getEmail(),
+                    "userId", user.getId(),
+                    "followStatus", followStatus,
+                    "followerCount", user.getFollowerCount(),
+                    "followingCount", user.getFollowingCount(),
+                    "postCount", user.getPostCount(),
+                    "userBio", Optional.ofNullable(user.getBio()).orElse(""),
+                    "dateOfBirth", Optional.ofNullable(user.getDateOfBirth()),
+                    "profilePicture", Optional.ofNullable(user.getProfilePicture()).orElse("")));
+
+            // If no posts, return early with empty posts array
+            if (posts == null || posts.isEmpty()) {
+                responseBody.put("posts", new ArrayList<>());
+                return ResponseEntity.ok(responseBody);
+            }
+
+            List<String> postIds = posts.stream().map(Post::getId).distinct().toList();
+
+            // Fetch likes asynchronously
+            CompletableFuture<Map<String, Boolean>> likeFuture = CompletableFuture.supplyAsync(
+                    () -> likeService.getLikeStatus(loginedUserId, postIds), executor);
+
+            // Fetch post details asynchronously
+            List<CompletableFuture<GetUserCardDetails>> postFutures = posts.stream()
+                    .map(post -> CompletableFuture.supplyAsync(() -> {
+                        boolean likeStatus = likeFuture.join().getOrDefault(post.getId(), false);
+
+                        GetUserCardDetails getCardDetails = new GetUserCardDetails();
+                        getCardDetails.setPostId(post.getId());
+                        getCardDetails.setLikeCount(post.getLikeCount());
+                        getCardDetails.setPostContent(post.getContent());
+                        getCardDetails.setPostImage(post.getPostImage());
+                        getCardDetails.setPostTitle(post.getTitle());
+                        getCardDetails.setLikeStatus(likeStatus);
+
+                        return getCardDetails;
+                    }, executor))
+                    .collect(Collectors.toList());
+
+            // Wait for all futures to complete
+            List<GetUserCardDetails> getCardDetailsList = postFutures.stream()
+                    .map(CompletableFuture::join)
+                    .collect(Collectors.toList());
+
+            responseBody.put("posts", getCardDetailsList);
+
+            return ResponseEntity.ok().body(responseBody);
+
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Collections.singletonMap("error", "Error fetching user data: " + e.getMessage()));
+        } finally {
+            executor.shutdown();
         }
-
-        User user = optionalUser.get();
-        List<Post> posts = postService.getPostsByUserId(user.getId());
-        boolean followStatus = followService.isFollowing(anotherUserId, user.getId());
-
-        // Always return user details, even if posts are empty
-        Map<String, Object> responseBody = new HashMap<>();
-        responseBody.put("user", Map.of(
-                "username", user.getUsername(),
-                "email", user.getEmail(),
-                "userId", user.getId(),
-                "followStatus", followStatus,
-                "followerCount", user.getFollowerCount(),
-                "followingCount", user.getFollowingCount(),
-                "postCount", user.getPostCount(),
-                "userBio", Optional.ofNullable(user.getBio()).orElse(""),
-                "dateOfBirth", Optional.ofNullable(user.getDateOfBirth()),
-                "profilePicture", Optional.ofNullable(user.getProfilePicture()).orElse("")));
-        responseBody.put("posts", new ArrayList<>()); // Default to an empty array
-
-        if (posts == null || posts.isEmpty()) {
-            return ResponseEntity.ok(responseBody); // ✅ Return user with empty posts array
-        }
-
-        List<String> postIds = posts.stream().map(Post::getId).distinct().toList();
-
-        // Fetch likes asynchronously
-        CompletableFuture<Map<String, Boolean>> likeFuture = CompletableFuture.supplyAsync(
-                () -> likeService.getLikeStatus(user.getId(), postIds), executor);
-
-        // Fetch post details asynchronously
-        List<CompletableFuture<GetUserCardDetails>> postFutures = posts.stream()
-                .map(post -> CompletableFuture.supplyAsync(() -> {
-
-                    boolean likeStatus = likeFuture.join().getOrDefault(post.getId(), false);
-
-                    GetUserCardDetails getCardDetails = new GetUserCardDetails();
-                    getCardDetails.setPostId(post.getId());
-                    getCardDetails.setLikeCount(post.getLikeCount());
-                    getCardDetails.setPostContent(post.getContent());
-                    getCardDetails.setPostImage(null);
-                    getCardDetails.setPostTitle(post.getTitle());
-                    getCardDetails.setLikeStatus(likeStatus);
-                    
-                    return getCardDetails;
-                }, executor))
-                .collect(Collectors.toList());
-
-        // Wait for all futures to complete
-        List<GetUserCardDetails> getCardDetailsList = postFutures.stream()
-                .map(CompletableFuture::join)
-                .collect(Collectors.toList());
-
-        responseBody.put("posts", getCardDetailsList); // ✅ Only replace empty posts if there are actual posts
-
-        return ResponseEntity.ok().body(responseBody);
     }
 
     public User getUserByUsername(String username) {
@@ -225,6 +242,5 @@ public class UserServiceImpl {
         return userRepository.findAllById(userIds);
 
     }
-    
 
 }

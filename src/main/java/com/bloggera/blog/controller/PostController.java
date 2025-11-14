@@ -4,6 +4,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ExecutionException;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.CrossOrigin;
@@ -28,30 +30,38 @@ import com.bloggera.blog.service.impl.PostServiceImpl;
 @RequestMapping("/api/posts")
 public class PostController {
 
+    private static final Logger logger = LoggerFactory.getLogger(PostController.class);
+
     @Autowired
     private PostServiceImpl postService;
 
     @PostMapping("/user/{userId}")
     public Post createPost(@PathVariable String userId, @RequestBody Post post) {
+        logger.info("Creating post for userId: {}", userId);
         return postService.createPost(userId, post);
     }
 
     @PostMapping("/cardDetails")
     public List<GetAllPostCardDetails> getCartDetails(@RequestBody ExcludedIds excludedIds) {
+        logger.info("Fetching card details for userId: {}, excludedIds count: {}", 
+            excludedIds.getUserId(), excludedIds.getExcludedIds() != null ? excludedIds.getExcludedIds().size() : 0);
         List<GetAllPostCardDetails> getAllPostCardDetails = postService.getCardDetails(excludedIds.getUserId(),
                 excludedIds.getExcludedIds(), excludedIds.getListOfCategories());
+        logger.info("Retrieved {} card details", getAllPostCardDetails.size());
         return getAllPostCardDetails;
     }
 
     @PostMapping("/data")
     public List<GetAllPostCardDetails> getData() {
+        logger.info("Fetching all data");
         List<GetAllPostCardDetails> getAllPostCardDetails = postService.getData();
         return getAllPostCardDetails;
     }
 
     @PostMapping("/fullPostDetails")
     public GetFullPostDetail getFullPostDetails(@RequestBody LikeDetails likedetails) {
-
+        logger.info("Fetching full post details for postId: {}, userId: {}", 
+            likedetails.getPostId(), likedetails.getUserId());
         return postService.getFullPostDetails(likedetails.getPostId(), likedetails.getUserId());
     }
 
@@ -63,16 +73,47 @@ public class PostController {
             @RequestParam("category") List<String> category,
             @RequestPart(value = "postImage", required = false) MultipartFile postImage) {
 
+        logger.info("=== ADD POST REQUEST ===");
+        logger.info("userId: {}", userId);
+        logger.info("title: {}", title);
+        logger.info("content length: {}", content != null ? content.length() : 0);
+        logger.info("categories: {}", category);
+        logger.info("postImage: {}", postImage != null ? postImage.getOriginalFilename() : "null");
+
+        if (userId == null || userId.trim().isEmpty()) {
+            logger.error("UserId is null or empty!");
+            return ResponseEntity.badRequest().body("UserId is required");
+        }
+
+        if (title == null || title.trim().isEmpty()) {
+            logger.error("Title is null or empty!");
+            return ResponseEntity.badRequest().body("Title is required");
+        }
+
+        if (content == null || content.trim().isEmpty()) {
+            logger.error("Content is null or empty!");
+            return ResponseEntity.badRequest().body("Content is required");
+        }
+
+        if (category == null || category.isEmpty()) {
+            logger.error("Categories list is null or empty!");
+            return ResponseEntity.badRequest().body("At least one category is required");
+        }
+
         Post post = new Post();
         post.setContent(content);
         post.setTitle(title);
         post.setCategories(category);
-        return postService.addPost(userId, post, postImage);
-
+        
+        ResponseEntity<?> response = postService.addPost(userId, post, postImage);
+        logger.info("Post creation response: {}", response.getStatusCode());
+        return response;
     }
 
     @PostMapping("/getAllPost")
     public List<Post> getAllPosts(@RequestBody ExcludedIds excludedIds) {
+        logger.info("Getting all posts with {} excluded IDs", 
+            excludedIds.getExcludedIds() != null ? excludedIds.getExcludedIds().size() : 0);
         return postService.getAllPosts(excludedIds.getExcludedIds());
     }
 
@@ -94,24 +135,24 @@ public class PostController {
             filteredPost = postService.getAllFilteredPosts(excludedIds.getExcludedIds(),
                     excludedIds.getListOfCategories());
         } catch (InterruptedException e) {
+            logger.error("Interrupted exception while getting filtered posts", e);
             e.printStackTrace();
         } catch (ExecutionException e) {
+            logger.error("Execution exception while getting filtered posts", e);
             e.printStackTrace();
         }
         return filteredPost;
-
     }
 
     @PostMapping("/getRandom")
     public List<Post> getRandomPost(@RequestBody ExcludedIds excludedIds) {
         return postService.getRandomPosts(excludedIds.getExcludedIds());
-
     }
 
     @PostMapping("/search")
     public List<GetAllPostCardDetails> searchPosts(@RequestBody ExcludedIds excludedIds) {
+        logger.info("Searching posts with text: {}, categories: {}", 
+            excludedIds.getText(), excludedIds.getListOfCategories());
         return postService.searchPostByText(excludedIds);
-        // return null;
     }
-
 }
